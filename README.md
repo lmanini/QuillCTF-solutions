@@ -1,5 +1,6 @@
 # QuillCFT solutions
 Here you can find the explainers I've submitted to QuillCTF, I find myself to be a little too verbose from time to time.
+If you want to chat about smart contract security let's chat on discord: ljmanini#1907
 
 ## TrueXOR
 Make 2 consecutive staticcalls to the same function return different values: base the result off of remaining gas.
