@@ -1,0 +1,96 @@
+************ Personal analysis and explainer ************
+The Gate contract presents a set of require statements that form a set of obstacles an attacker
+must pass in order to achieve his goal of settings `opened` to true.
+The first obstacle is very straight forward: achieve your goal by employing a contract whose
+code size doesn't exceed 32 bytes. I manage to solve the challenge using exactly 32 bytes.
+The second obstacle comes in the form that, when the Gate contract invokes `guardian` with function
+selector equal to 0x00000000 (as may be found employing `cast sig "f00000000_bvvvdlt()"`), the Gate
+contract expects to be returned with it's own address.
+Obstacle number 3 is similar to the second, with the difference that when using 0x00000001 as a
+selector, it expects to be returned the `tx.origin` address.
+Finally, the fourth obstacle is that the Gate contract expects a call to `guardian` to fail, when
+invoking its `fail()` method.
+
+I've managed to solve this CTF through a number of tricks:
+1. Throughout all of my bytecode, I've employed CALLVALUE as if it were PUSH1 0, effectively
+occupying only 1 byte of code instead of 2.
+2. I've optimized the 2 cases in which Gate calls the exploit contract with selectors 0 and 1
+in that, CALLER and ORIGIN are pushed to the stack in separate locations of the code, but the 
+function prologue in which these values are stored in memory are returned is the same used by
+both branches.
+3. To guarantee that a call to "fail()" returns false as it's success value, I created the circumstances
+to voluntarily generate a StackUnderflow EVM error, so that obstacle 4 is cleared and the challenge is completed.
+
+As a smaller note, to be able to do a PUSH1 1 in a single byte, I've used the CHAINID operation,
+implying that my solution would only work on Ethereum mainnet.
+
+************ Exploit mnemonic runtime bytecode ************
+CALLDATASIZE
+CALLVALUE                
+PUSH 0x1c                
+CALLDATACOPY            
+CALLVALUE
+MLOAD                    
+DUP1                    
+PUSH 0x0f             
+JUMPI
+CALLER      
+PUSH 0x19  
+JUMP        
+
+JUMPDEST 
+CHAINID
+EQ                    
+PUSH 0x17               
+JUMPI
+PC
+REVERT
+
+JUMPDEST 
+ORIGIN   
+JUMPDEST 
+CALLVALUE
+MSTORE   
+PUSH 0x20 
+CALLVALUE
+RETURN
+
+************ PoC foundry test case ************
+
+** to be run with `forge test` **
+
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.13;
+
+import "forge-std/Test.sol";
+import "../src/Gate.sol";
+
+contract GateTest is Test {
+    Gate gate;
+    address gateExploit;
+
+    function setUp() external {
+        gate = new Gate();
+    }
+
+    function testExploit() external {
+        vm.chainId(1); // needed for the exploit to work! otherwise in foundry chain id is 31337
+        
+        gateExploit = deployExploit();
+        gate.open(gateExploit);
+        assertTrue(gate.opened());
+    }
+
+    function deployExploit() internal returns (address pointer) {
+        // taken from sstore2 https://github.com/0xsequence/sstore2/blob/master/contracts/utils/Bytecode.sol#L13
+        bytes memory code = abi.encodePacked(
+            hex"63",
+            uint32(0x20),
+            hex"80_60_0E_60_00_39_60_00_F3",
+            hex"3634601c37345180600f57336019565b461460175758fd5b325b3452602034f3"
+        );
+        assembly {
+            pointer := create(0, add(code, 0x20), mload(code))
+        }
+    }
+}

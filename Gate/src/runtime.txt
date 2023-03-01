@@ -1,0 +1,31 @@
+CALLDATASIZE
+CALLVALUE                
+PUSH 0x1c                
+CALLDATACOPY            
+CALLVALUE
+MLOAD                    
+DUP1                    
+PUSH 0x0f             
+JUMPI
+CALLER      
+PUSH 0x19  
+JUMP        
+
+JUMPDEST 
+CHAINID
+EQ                    
+PUSH 0x17               
+JUMPI
+PC
+REVERT
+
+JUMPDEST 
+ORIGIN   
+JUMPDEST 
+CALLVALUE
+MSTORE   
+PUSH 0x20 
+CALLVALUE
+RETURN
+
+;; runtime bytecode 0x3634601c37345180600f57336019565b461460175758fd5b325b3452602034f3
