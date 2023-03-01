@@ -50,7 +50,32 @@ draining the WETH10 contract of it's ETH balance.
 This flow is implemented in the exploit contract's attack() function.
 
 ## Gate
-Challenge still active 😜
+The Gate contract presents a set of require statements that form a set of obstacles an attacker must pass in order to achieve his goal of settings `opened` to true.
+The first obstacle is very straight forward: achieve your goal by employing a contract whose code size doesn't exceed 32 bytes. I manage to solve the challenge using exactly 32 bytes.
+The second obstacle comes in the form that, when the Gate contract invokes `guardian` with function selector equal to 0x00000000 (as may be found employing `cast sig "f00000000_bvvvdlt()"`), the Gate contract expects to be returned with it's own address.
+Obstacle number 3 is similar to the second, with the difference that when using 0x00000001 as a selector, it expects to be returned the `tx.origin` address.
+Finally, the fourth obstacle is that the Gate contract expects a call to `guardian` to fail, when invoking its `fail()` method.
+
+I've managed to solve this CTF through a number of tricks:
+
+1. Throughout all of my bytecode, I've employed CALLVALUE as if it were PUSH1 0, effectively occupying only 1 byte of code instead of 2.
+2. I've optimized the 2 cases in which Gate calls the exploit contract with selectors 0 and 1 in that, CALLER and ORIGIN are pushed to the stack in separate locations of the code, but the function prologue in which these values are stored in memory are returned is the same used by both branches.
+3. To guarantee that a call to "fail()" returns false as it's success value, I created the circumstances to voluntarily generate a StackUnderflow EVM error, so that obstacle 4 is cleared and the challenge is completed.
+
+As a smaller note, to be able to do a PUSH1 1 in a single byte, I've used the CHAINID operation, implying that my solution would only work on Ethereum mainnet.
 
 ## PandaToken
+
+The PandaToken contract implements a standard ERC20 token with a special functionality:
+users are able to asynchronously send tokens by signing a message which specifies the receiver and the amount of tokens to be transferred: when a receiver calls this function
+with a valid signature, the tokens are minted to his address and the same amount of tokens are saved to be burned from the sender's address.
+The vulnerable function in this case is the `getTokens(uint, bytes)` function.
+At first, it calculates the amount of tokens to be minted to the receiver, using the `calculateAmount(uint)` function which, upon close inspection, is found to simply return the amount passed as a parameter.
+After that, the `getTokens()` function decomposes the received signature in it's v, r, s fields and tries to verify it against the message formed by msg.sender and the tokens to be minted.
+Here lies the contract's vulnerability: when executing `ecrecover()`, if a signature fails to be verified, the returned address is the zero address. In this contract, this case is not checked for (e.g. using `require(giftFrom != address(0))`).
+This issue, in combination with the fact address(0) is given 10 PND by executing the PandaToken constructor (as is understandable from the first 5 lines in the PandaToken constructor),allows an attacker to submit a malformed signature, which will assign `giftFrom = address(0)`, which in turn will pass `getTokens()`'s second require statement which checks `balanceOf(giftFrom)`.
+Given that used signatures are saved in the contract's state so that they are not replayed, an attacker needs to build 3 malicious signatures, each extracting 1e18 PND tokens.
+At the end, the attacker is able to achieve his goal of having 3e18 PND.
+
+## WETH11
 Challenge still active 😜
